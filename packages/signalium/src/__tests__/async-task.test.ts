@@ -412,4 +412,20 @@ describe('async tasks', () => {
     expect(t.isResolved).toBe(true);
     expect(t.value).toBe('success');
   });
+
+  test('task body can create nested callbacks after an await when invoked outside a consumer', async () => {
+    const getC = reactive((a: number) => {
+      return task(async () => {
+        await new Promise(r => setTimeout(r, 1));
+        const inner = () => a + 1; // rewritten to callback(() => a + 1, idx)
+        return inner();
+      });
+    });
+
+    const t = getC(41);
+    // Invoked at top level — no ambient consumer, so CURRENT_CALLBACK must be
+    // restored across the await for the nested callback() call to succeed.
+    await expect(t.run()).resolves.toBe(42);
+    expect(t.value).toBe(42);
+  });
 });

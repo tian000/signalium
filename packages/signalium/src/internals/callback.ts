@@ -37,7 +37,7 @@ export class Callback<T extends Function = Function> {
         const result = fn(...args);
 
         return typeof result === 'object' && result !== null && isGeneratorResult(result)
-          ? generatorResultToPromiseWithScope(result, scope)
+          ? generatorResultToPromiseWithScope(result, scope, this)
           : result;
       } finally {
         CURRENT_CALLBACK = prevCallback;
@@ -45,6 +45,14 @@ export class Callback<T extends Function = Function> {
       }
     }) as unknown as T;
   }
+}
+
+export function getInternalCurrentCallback(): Callback | undefined {
+  return CURRENT_CALLBACK;
+}
+
+export function setInternalCurrentCallback(callback: Callback | undefined): void {
+  CURRENT_CALLBACK = callback;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
