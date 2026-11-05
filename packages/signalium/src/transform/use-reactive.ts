@@ -91,9 +91,14 @@ function createSignaliumUseReactiveTransform(api: any, opts?: SignaliumUseReacti
       if (!bodyPath.isImportDeclaration()) continue;
       const importDecl = bodyPath.node as t.ImportDeclaration;
       if (importDecl.source.value !== reactImportPath) continue;
+      // Skip `import type` declarations — a type-only imported `useCallback`
+      // has no runtime binding and cannot be reused in value position.
+      if ((importDecl as any).importKind === 'type') continue;
       for (const spec of importDecl.specifiers) {
         if ((spec as any).type !== 'ImportSpecifier') continue;
         const ispec = spec as unknown as t.ImportSpecifier;
+        // Also skip per-specifier type-only imports (`import { type useCallback }`).
+        if ((ispec as any).importKind === 'type') continue;
         const imported = ispec.imported as t.Identifier;
         if (imported && imported.name === 'useCallback') {
           return (ispec.local as t.Identifier).name;
@@ -106,6 +111,9 @@ function createSignaliumUseReactiveTransform(api: any, opts?: SignaliumUseReacti
       if (!bodyPath.isImportDeclaration()) continue;
       const node = bodyPath.node as t.ImportDeclaration;
       if (node.source.value !== reactImportPath) continue;
+      // Skip `import type` declarations — adding a value specifier there would
+      // make it type-only at runtime.
+      if ((node as any).importKind === 'type') continue;
       const localName = programPath.scope.generateUidIdentifier('useCallback').name;
       node.specifiers.push(t.importSpecifier(t.identifier(localName), t.identifier('useCallback')));
       return localName;
