@@ -191,4 +191,39 @@ describe('React > callbacks inside component()', () => {
     await userEvent.click(getByText('Run'));
     await expect.element(getByText('child')).toBeInTheDocument();
   });
+
+  test('async callback can create nested callbacks after await in component event handler', async () => {
+    const ctx = context('default');
+
+    const inner = reactive(() => getContext(ctx));
+
+    const makeAsyncCb = reactive(() => async () => {
+      await sleep(10);
+      const handler = () => inner(); // rewritten to callback(() => inner(), idx)
+      return handler();
+    });
+
+    const Runner = component(() => {
+      const result = useSignal<string | null>(null);
+      const cb = makeAsyncCb();
+      const run = useCallback(async () => {
+        result.value = await cb();
+      }, [cb, result]);
+      return (
+        <div>
+          <button onClick={run}>Run</button>
+          <div>{result.value}</div>
+        </div>
+      );
+    });
+
+    const { getByText } = render(
+      <ContextProvider contexts={[[ctx, 'child']]}>
+        <Runner />
+      </ContextProvider>,
+    );
+
+    await userEvent.click(getByText('Run'));
+    await expect.element(getByText('child')).toBeInTheDocument();
+  });
 });

@@ -149,6 +149,41 @@ describe('callback + reactive scope/identity', () => {
     expect(await result).toBe('child');
   });
 
+  test('nested callback defined after an await inside an async callback is created in the correct context', async () => {
+    const run = reactive(() => async () => {
+      await new Promise(r => setTimeout(r, 1));
+      const inner = () => 42; // transform rewrites this to `callback(() => 42, idx)`
+      return inner();
+    });
+
+    // Invoked at top level (no ambient consumer) — must not throw
+    expect(await run()()).toBe(42);
+  });
+
+  test('nested callback defined after an await inside an async callback captures the correct scope', async () => {
+    const ctx = context('default');
+
+    const makeAsyncCb = reactive(() => {
+      return async () => {
+        await nextTick();
+        const inner = () => getContext(ctx); // rewritten to callback(() => getContext(ctx), idx)
+        return inner();
+      };
+    });
+
+    // Captured child scope persists across await for nested callback creation
+    const cbChild = makeAsyncCb.withContexts([ctx, 'child'])();
+    expect(await cbChild()).toBe('child');
+
+    // Default scope
+    const cbDefault = makeAsyncCb();
+    expect(await cbDefault()).toBe('default');
+
+    // Invocation under another ambient scope still uses captured scope
+    const result = withContexts([[ctx, 'other']], () => cbChild());
+    expect(await result).toBe('child');
+  });
+
   test('callbacks can be used to create reactive closures', async () => {
     const sa = signal(0);
     const sb = signal(0);

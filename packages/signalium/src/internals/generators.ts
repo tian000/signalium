@@ -1,5 +1,6 @@
 import { isReactivePromise } from './async.js';
 import { getCurrentConsumer, setCurrentConsumer } from './consumer.js';
+import { Callback, getInternalCurrentCallback, setInternalCurrentCallback } from './callback.js';
 import { getInternalCurrentScope, setCurrentScope, SignalScope } from './contexts.js';
 import { ReactiveSignal } from './reactive.js';
 import { isPromise } from './utils/type-utils.js';
@@ -51,6 +52,7 @@ export function generatorResultToPromiseWithConsumer<T>(
 export function generatorResultToPromiseWithScope<T, Args extends unknown[]>(
   generator: Generator<any, T>,
   savedScope: SignalScope | undefined,
+  savedCallback: Callback | undefined,
 ): Promise<T> {
   function adopt(value: any) {
     return typeof value === 'object' && value !== null && (isPromise(value) || isReactivePromise(value))
@@ -61,9 +63,11 @@ export function generatorResultToPromiseWithScope<T, Args extends unknown[]>(
   return new Promise((resolve, reject) => {
     function step(fn: (value: any) => IteratorResult<any, any>, value?: any) {
       const prevScope = getInternalCurrentScope();
+      const prevCallback = getInternalCurrentCallback();
 
       try {
         setCurrentScope(savedScope);
+        setInternalCurrentCallback(savedCallback);
         const result = fn(value);
         if (result.done) {
           resolve(result.value);
@@ -73,6 +77,7 @@ export function generatorResultToPromiseWithScope<T, Args extends unknown[]>(
       } catch (e) {
         reject(e);
       } finally {
+        setInternalCurrentCallback(prevCallback);
         setCurrentScope(prevScope);
       }
     }
