@@ -176,16 +176,14 @@ export function forwardRelay<T>(state: RelayState<T>, sourceRelay: ReactivePromi
       state.setPromise(promise);
     }
   } else if (sourceRelay.isRejected) {
-    // Accessing error establishes dependency and forwards it
+    // Accessing error establishes dependency and forwards it.
+    // `undefined` is a valid rejection reason, so forward unconditionally.
     const error = sourceRelay.error;
-    if (error !== undefined) {
-      state.setError(error);
-    }
+    state.setError(error);
   } else if (sourceRelay.isResolved && sourceRelay.isReady) {
-    // Accessing value establishes dependency and forwards it
+    // Accessing value establishes dependency and forwards it.
+    // `undefined` is a valid resolved value, so forward unconditionally.
     const value = sourceRelay.value;
-    if (value !== undefined) {
-      state.value = value;
-    }
+    state.value = value;
   }
 }
