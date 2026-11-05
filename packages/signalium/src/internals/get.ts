@@ -30,7 +30,7 @@ export function getSignal<T, Args extends unknown[]>(signal: ReactiveSignal<T, A
           });
         }
 
-        if (currentConsumer.watchCount > 0) {
+        if (currentConsumer.watchCount > 0 || currentConsumer._isActive) {
           watchSignal(signal);
         }
       }
