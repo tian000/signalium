@@ -13,12 +13,16 @@ function createSignaliumPromiseMethodsTransform(api: any, opts?: SignaliumPromis
   const transformedImports = createTransformedImports(
     [
       ['callback', ['signalium']],
+      ['component', ['signalium/react']],
       ['reactive', ['signalium']],
       ['reactiveMethod', ['signalium']],
       ['relay', ['signalium']],
       ['task', ['signalium']],
       ['watcher', ['signalium']],
       ['retain', ['signalium', 'signalium/utils']],
+      ['useReactive', ['signalium/react']],
+      ['useReactiveShallow', ['signalium/react']],
+      ['useReactiveDeep', ['signalium/react']],
     ],
     opts?.transformedImports,
     opts?.importPaths,
