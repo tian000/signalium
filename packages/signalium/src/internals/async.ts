@@ -305,7 +305,7 @@ export class ReactivePromiseImpl<T> {
     // isPending/value). Skip self-subscription to avoid a dependency cycle.
     if (currentConsumer === signal) return;
 
-    if (currentConsumer?.watchCount === 0) {
+    if (currentConsumer?.watchCount === 0 && !currentConsumer?._isActive) {
       const { ref, computedCount, deps } = currentConsumer;
       const prevEdge = deps.get(signal);
 
