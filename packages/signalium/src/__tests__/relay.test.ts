@@ -730,6 +730,236 @@ describe('relays', () => {
       await nextTick();
       expect(forwardedRelay.value).toBe(1); // Should still be 1, not 99, since it's deactivated
     });
+
+    test('Forwards a resolved undefined value from source to target relay', async () => {
+      const sourceRelay = relay<void>(state => {
+        state.value = undefined;
+
+        return {
+          update: () => {
+            state.value = undefined;
+          },
+        };
+      });
+
+      const forwardedRelay = relay<void>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      const consumer = reactive(() => forwardedRelay.value);
+
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 1 });
+
+      expect(sourceRelay.isPending).toBe(false);
+      expect(sourceRelay.isResolved).toBe(true);
+      expect(sourceRelay.isReady).toBe(true);
+      expect(sourceRelay.value).toBe(undefined);
+
+      expect(forwardedRelay.isPending).toBe(false);
+      expect(forwardedRelay.isResolved).toBe(true);
+      expect(forwardedRelay.isReady).toBe(true);
+      expect(forwardedRelay.value).toBe(undefined);
+    });
+
+    test('Forwards a resolved undefined value via the promise path', async () => {
+      const sourceRelay = relay<void>(state => {
+        state.setPromise(Promise.resolve());
+
+        return {
+          update: () => {
+            state.setPromise(Promise.resolve());
+          },
+        };
+      });
+
+      const forwardedRelay = relay<void>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      expect(sourceRelay.isPending).toBe(true);
+      expect(forwardedRelay.isPending).toBe(true);
+
+      const consumer = reactive(() => (forwardedRelay.isPending ? undefined : forwardedRelay.value));
+
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 1 });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(sourceRelay.isPending).toBe(false);
+      expect(sourceRelay.isResolved).toBe(true);
+      expect(sourceRelay.isReady).toBe(true);
+      expect(sourceRelay.value).toBe(undefined);
+
+      expect(forwardedRelay.isPending).toBe(false);
+      expect(forwardedRelay.isResolved).toBe(true);
+      expect(forwardedRelay.isReady).toBe(true);
+      expect(forwardedRelay.value).toBe(undefined);
+    });
+
+    test('Forwards a rejected undefined from source to target relay', async () => {
+      const shouldReject = signal(false);
+
+      const sourceRelay = relay<number>(state => {
+        if (shouldReject.value) {
+          state.setError(undefined);
+        } else {
+          state.value = 1;
+        }
+
+        return {
+          update: () => {
+            if (shouldReject.value) {
+              state.setError(undefined);
+            } else {
+              state.value = 1;
+            }
+          },
+        };
+      });
+
+      const forwardedRelay = relay<number>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      const consumer = reactive(() => {
+        if (forwardedRelay.isRejected) {
+          return forwardedRelay.error;
+        }
+        return forwardedRelay.value;
+      });
+
+      expect(consumer).toHaveValueAndCounts(1, { compute: 1 });
+      expect(forwardedRelay.isRejected).toBe(false);
+
+      shouldReject.value = true;
+
+      await nextTick();
+
+      expect(sourceRelay.isRejected).toBe(true);
+      expect(sourceRelay.error).toBe(undefined);
+
+      expect(forwardedRelay.isPending).toBe(false);
+      expect(forwardedRelay.isRejected).toBe(true);
+      expect(forwardedRelay.error).toBe(undefined);
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 2 });
+    });
+
+    test('Forwards an updated value that transitions to undefined', async () => {
+      const externalValue = signal<number | undefined>(1);
+
+      const sourceRelay = relay<number | undefined>(state => {
+        state.value = externalValue.value;
+
+        return {
+          update: () => {
+            state.value = externalValue.value;
+          },
+        };
+      });
+
+      const forwardedRelay = relay<number | undefined>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      const consumer = reactive(() => forwardedRelay.value);
+
+      expect(consumer).toHaveValueAndCounts(1, { compute: 1 });
+      expect(forwardedRelay).toHaveValueAndCounts(1, { compute: 1, internalSet: 1 });
+
+      externalValue.value = undefined;
+
+      await nextTick();
+
+      expect(sourceRelay.isPending).toBe(false);
+      expect(sourceRelay.isResolved).toBe(true);
+      expect(sourceRelay.isReady).toBe(true);
+      expect(sourceRelay.value).toBe(undefined);
+
+      expect(forwardedRelay.isPending).toBe(false);
+      expect(forwardedRelay.isResolved).toBe(true);
+      expect(forwardedRelay.isReady).toBe(true);
+      expect(forwardedRelay.value).toBe(undefined);
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 2 });
+    });
+
+    test('Forwards an updated value that transitions from undefined to a defined value', async () => {
+      const externalValue = signal<number | undefined>(undefined);
+
+      const sourceRelay = relay<number | undefined>(state => {
+        state.value = externalValue.value;
+
+        return {
+          update: () => {
+            state.value = externalValue.value;
+          },
+        };
+      });
+
+      const forwardedRelay = relay<number | undefined>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      const consumer = reactive(() => forwardedRelay.value);
+
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 1 });
+      expect(forwardedRelay.isPending).toBe(false);
+      expect(forwardedRelay.isResolved).toBe(true);
+      expect(forwardedRelay.isReady).toBe(true);
+      expect(forwardedRelay.value).toBe(undefined);
+
+      externalValue.value = 42;
+
+      await nextTick();
+
+      expect(forwardedRelay.isPending).toBe(false);
+      expect(forwardedRelay.isResolved).toBe(true);
+      expect(forwardedRelay.isReady).toBe(true);
+      expect(forwardedRelay.value).toBe(42);
+      expect(consumer).toHaveValueAndCounts(42, { compute: 2 });
+    });
+
+    test('Awaiting a forwarded relay whose source resolves to undefined does not hang', async () => {
+      const sourceRelay = relay<void>(state => {
+        state.value = undefined;
+      });
+
+      const forwardedRelay = relay<void>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      const consumer = reactive(() => forwardedRelay.value);
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 1 });
+
+      const result = await Promise.race([
+        forwardedRelay.then(value => value),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('forwarded relay hung')), 1000)),
+      ]);
+
+      expect(result).toBe(undefined);
+    });
+
+    test('Awaiting a forwarded relay whose source rejects to undefined does not hang', async () => {
+      const sourceRelay = relay<number>(state => {
+        state.setError(undefined);
+      });
+
+      const forwardedRelay = relay<number>(state => {
+        forwardRelay(state, sourceRelay);
+      });
+
+      const consumer = reactive(() => (forwardedRelay.isRejected ? forwardedRelay.error : forwardedRelay.value));
+      expect(consumer).toHaveValueAndCounts(undefined, { compute: 1 });
+
+      const result = await Promise.race([
+        forwardedRelay.then(
+          () => 'resolved',
+          () => 'rejected',
+        ),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('forwarded relay hung')), 1000)),
+      ]);
+
+      expect(result).toBe('rejected');
+    });
   });
 
   test('deactivating a relay while its async value is pending does not cause errors', async () => {
