@@ -188,19 +188,3 @@ export const asyncSettled = async (timeout = 100) => {
     ]);
   }
 };
-
-export const batch = (fn: () => void) => {
-  const prevFlush = currentFlush;
-
-  let resolve: () => void;
-  const promise = new Promise<void>(r => (resolve = r));
-
-  currentFlush = { promise, resolve: resolve! };
-
-  fn();
-  flushWatchers();
-
-  if (prevFlush) {
-    promise.then(prevFlush.resolve);
-  }
-};
