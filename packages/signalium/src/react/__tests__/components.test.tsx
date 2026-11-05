@@ -540,5 +540,74 @@ describe('React > Components', () => {
 
       await vi.waitFor(() => expect(Shell.renderCount).toBeGreaterThan(before));
     });
+
+    test('does not walk an element nested inside a plain-object prop', () => {
+      class Expensive {}
+      registerCustomHash(Expensive, () => {
+        throw new Error('a nested element tree must not be hashed structurally');
+      });
+      // Only reachable by recursing into the element's props.
+      const marker = new Expensive();
+      const Inner = ({ m }: { m: Expensive }) => <span>{m ? 'NESTED' : ''}</span>;
+      const el = <Inner m={marker} />;
+
+      // Direct prop and direct array prop: identity-hashed (the existing guarantee).
+      expect(() => hashProps({ slot: el })).not.toThrow();
+      expect(() => hashProps({ children: [el] })).not.toThrow();
+      // Nested inside a plain-object prop: must also be identity-hashed.
+      expect(() => hashProps({ data: { slot: el } })).not.toThrow();
+      // Arrays inside objects, and deeper object nesting, too.
+      expect(() => hashProps({ data: { items: [el] } })).not.toThrow();
+      expect(() => hashProps({ data: { config: { icon: el } } })).not.toThrow();
+    });
+
+    test('does not read through a nested element to a throwing proxy in its props', () => {
+      const proxy = new Proxy(
+        { value: 1 },
+        {
+          get() {
+            throw new Error('GET_TRAP_THREW');
+          },
+        },
+      );
+      const Inner = ({ m }: { m: { value: number } }) => <span>{m ? 'PROXY' : ''}</span>;
+      const el = <Inner m={proxy} />;
+
+      // The element is opaque, so the hash must not reach the proxy at any depth.
+      expect(() => hashProps({ slot: el })).not.toThrow();
+      expect(() => hashProps({ children: [el] })).not.toThrow();
+      expect(() => hashProps({ data: { slot: el } })).not.toThrow();
+    });
+
+    test('identity-hashes a nested element so a fresh tree re-renders', () => {
+      const Inner = ({ children }: { children: React.ReactNode }) => <span>{children}</span>;
+      const el1 = <Inner>A</Inner>;
+      const el2 = <Inner>A</Inner>;
+
+      // Direct prop: different identities produce different hashes (re-render).
+      expect(hashProps({ slot: el1 })).not.toBe(hashProps({ slot: el2 }));
+      // Nested in a plain object: now also identity-hashed, so different identities differ.
+      expect(hashProps({ data: { slot: el1 } })).not.toBe(hashProps({ data: { slot: el2 } }));
+      // Same identity → same hash (stable).
+      expect(hashProps({ data: { slot: el1 } })).toBe(hashProps({ data: { slot: el1 } }));
+    });
+
+    test('terminates on a self-referencing plain-object prop', () => {
+      const data: Record<string, unknown> = {};
+      data.self = data;
+
+      expect(typeof hashProps({ data })).toBe('number');
+    });
+
+    test('still hashes a plain-object prop without elements structurally', () => {
+      // No elements: plain objects still hash by content, so a new-but-equal
+      // object reuses the memo. Guards against the object branch losing its
+      // structural hash when the element special-case is absent.
+      const a = { value: 1, nested: { x: 1 } };
+      const b = { value: 1, nested: { x: 1 } };
+
+      expect(hashProps({ data: a })).toBe(hashProps({ data: b }));
+      expect(hashProps({ data: a })).not.toBe(hashProps({ data: { value: 2, nested: { x: 1 } } }));
+    });
   });
 });

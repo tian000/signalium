@@ -1,12 +1,5 @@
 import { useRef } from 'react';
-import {
-  ARRAY_SEED,
-  finalizeHash,
-  getObjectHash,
-  hashObjectKeys,
-  hashValue,
-  mixHash,
-} from '../internals/utils/hash.js';
+import { ARRAY_SEED, finalizeHash, getObjectHash, hashValue, mixHash, OBJECT_SEED } from '../internals/utils/hash.js';
 
 const { imul } = Math;
 const { getPrototypeOf, keys: objectKeys } = Object;
@@ -34,10 +27,20 @@ function hashPropValue(value: unknown, seen: unknown[]): number {
       if (keys.includes('$$typeof') && typeof (value as { $$typeof?: unknown }).$$typeof === 'symbol') {
         return getObjectHash(value);
       }
+      // Route each value back through `hashPropValue` so an element nested inside
+      // a plain-object prop is identity-hashed, not structurally walked — the
+      // same treatment the array branch gives items, and the only way the
+      // opaque-element guarantee holds below the shallow prop value. Keys are
+      // strings, so they stay on the `hashValue` path.
+      if (seen.includes(value)) return 0;
       seen.push(value);
-      const h = hashObjectKeys(value, keys, seen);
+      const keyMultiplier = 0x9e3779b9; // 2^32 / golden ratio, as in `hashObjectKeys`
+      let sum = OBJECT_SEED;
+      for (const key of keys) {
+        sum += imul(hashValue(key), keyMultiplier) ^ hashPropValue((value as Record<string, unknown>)[key], seen);
+      }
       seen.pop();
-      return h;
+      return sum >>> 0;
     }
 
     // Plain arrays only: an `Array` subclass hashes like any other class instance

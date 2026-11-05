@@ -126,7 +126,7 @@ function hashObject(obj: object, seen: unknown[]) {
 /** `hashObject` over keys the caller already has; `obj` must be on `seen`. */
 export function hashObjectKeys(obj: object, keys: string[], seen: unknown[]) {
   const keyMultiplier = 0x9e3779b9; // 2^32 / golden ratio
-  let sum = OBJECT;
+  let sum = OBJECT_SEED;
 
   for (const key of keys) {
     sum += imul(hashValue(key, seen), keyMultiplier) ^ hashValue((obj as any)[key], seen);
@@ -187,7 +187,7 @@ const NULL = hashStr('null', HashType.NULL);
 const TRUE = hashStr('true', HashType.TRUE);
 const FALSE = hashStr('false', HashType.FALSE);
 export const ARRAY_SEED = hashStr('array', HashType.ARRAY);
-const OBJECT = hashStr('object', HashType.OBJECT);
+export const OBJECT_SEED = hashStr('object', HashType.OBJECT);
 const SET = hashStr('set', HashType.SET);
 const MAP = hashStr('map', HashType.MAP);
 
