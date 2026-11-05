@@ -10,6 +10,7 @@
   "sideEffects": false,
   "main": "./dist/cjs/production/index.js",
   "module": "./dist/esm/production/index.js",
+  "types": "./index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/esm/index.d.ts",
@@ -128,12 +129,19 @@
   "files": [
     "dist/esm/**",
     "dist/cjs/**",
+    "index.d.ts",
     "react.js",
+    "react.d.ts",
     "react-server.js",
+    "react-server.d.ts",
     "transform.js",
+    "transform.d.ts",
     "debug.js",
+    "debug.d.ts",
     "utils.js",
+    "utils.d.ts",
     "config.js",
+    "config.d.ts",
     "README.md",
     "CHANGELOG.md",
     "LICENSE*"
