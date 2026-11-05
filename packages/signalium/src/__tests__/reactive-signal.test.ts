@@ -692,5 +692,4 @@ describe('reactiveSignal', () => {
       unsub();
     });
   });
-
 });
