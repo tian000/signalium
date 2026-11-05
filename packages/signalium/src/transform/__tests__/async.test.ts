@@ -46,3 +46,92 @@ describe('signaliumAsyncTransform', () => {
     });
   }
 });
+
+describe('signaliumAsyncTransform - for await', () => {
+  it('throws a helpful error for `for await` in a reactive async arrow function', () => {
+    const input = `
+import { reactive } from 'signalium';
+const f = reactive(async () => {
+  for await (const x of xs) {
+    out.push(x);
+  }
+});
+`;
+    expect(() => runTransform(input)).toThrow(/for await/);
+  });
+
+  it('throws a helpful error for `for await` in a reactive async function expression', () => {
+    const input = `
+import { reactive } from 'signalium';
+const f = reactive(async function () {
+  for await (const x of xs) {
+    out.push(x);
+  }
+});
+`;
+    expect(() => runTransform(input)).toThrow(/for await/);
+  });
+
+  it('throws a helpful error for `for await` in a task async function', () => {
+    const input = `
+import { task } from 'signalium';
+const f = task(async () => {
+  for await (const x of xs) {
+    out.push(x);
+  }
+});
+`;
+    expect(() => runTransform(input)).toThrow(/for await/);
+  });
+
+  it('error message mentions reactive functions and suggests alternatives', () => {
+    const input = `
+import { reactive } from 'signalium';
+const f = reactive(async () => {
+  for await (const x of xs) {}
+});
+`;
+    expect(() => runTransform(input)).toThrow(/reactive|task|relay|callback/);
+  });
+
+  it('does not throw for `for await` outside of tracked calls', () => {
+    const input = `
+import { reactive } from 'signalium';
+async function f() {
+  for await (const x of xs) {
+    out.push(x);
+  }
+}
+`;
+    const output = runTransform(input);
+    expect(normalize(output)).toEqual(normalize(input));
+  });
+
+  it('does not throw for plain for/of loops in a reactive async function', () => {
+    const input = `
+import { reactive } from 'signalium';
+const f = reactive(async () => {
+  const items = await getItems();
+  for (const item of items) {
+    out.push(item);
+  }
+});
+`;
+    const output = runTransform(input);
+    expect(output).toContain('function*');
+    expect(output).toContain('yield getItems()');
+    expect(output).toContain('for (const item of items)');
+    expect(output).not.toContain('for await');
+  });
+
+  it('throws for `for await` even when an await expression precedes it', () => {
+    const input = `
+import { reactive } from 'signalium';
+const f = reactive(async () => {
+  await first();
+  for await (const x of xs) {}
+});
+`;
+    expect(() => runTransform(input)).toThrow(/for await/);
+  });
+});
