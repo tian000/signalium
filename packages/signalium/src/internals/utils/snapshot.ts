@@ -99,17 +99,20 @@ function snapshotMap(current: Map<unknown, unknown>, prev: unknown, snap: Snapsh
   return changed ? result : prevMap!;
 }
 
-function snapshotSet(current: Set<unknown>, prev: unknown, _snap: SnapshotFn): Set<unknown> {
+function snapshotSet(current: Set<unknown>, prev: unknown, snap: SnapshotFn): Set<unknown> {
   const prevSet = prev instanceof Set ? prev : undefined;
   let changed = !prevSet || prevSet.size !== current.size;
 
   const result = new Set();
+  let i = 0;
+  const prevElems = prevSet ? Array.from(prevSet) : undefined;
   for (const val of current) {
-    const snapped = snapshot(val, prevSet?.has(val) ? val : undefined);
+    const snapped = snap(val, prevElems?.[i]);
     result.add(snapped);
-    if (!changed && !prevSet!.has(snapped)) {
+    if (!changed && snapped !== prevElems![i]) {
       changed = true;
     }
+    i++;
   }
 
   return changed ? result : prevSet!;

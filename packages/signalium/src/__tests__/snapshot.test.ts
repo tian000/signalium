@@ -203,4 +203,50 @@ describe('snapshot', () => {
       expect(result).not.toBe(obj);
     });
   });
+
+  describe('Set structural sharing', () => {
+    test('Set of plain objects returns prev when unchanged (same live Set)', () => {
+      const el = { a: 1 };
+      const live = new Set([el]);
+      const first = snapshot(live, undefined) as Set<unknown>;
+      const second = snapshot(live, first) as Set<unknown>;
+
+      // The Set reference must be stable across unchanged snapshots.
+      expect(second).toBe(first);
+      // And the element clones must be structurally shared (not re-cloned).
+      expect(Array.from(second)[0]).toBe(Array.from(first)[0]);
+    });
+
+    test('Set of plain objects re-uses unchanged element clones when one element changes', () => {
+      const obj1 = { id: 1 };
+      const obj2 = { id: 2 };
+      const first = snapshot(new Set([obj1, obj2]), undefined) as Set<unknown>;
+      const firstElems = Array.from(first);
+
+      // Replace only the second element; the first element is structurally identical.
+      const second = snapshot(new Set([obj1, { id: 3 }]), first) as Set<unknown>;
+      const secondElems = Array.from(second);
+
+      expect(second).not.toBe(first);
+      // Unchanged element's clone is re-used.
+      expect(secondElems[0]).toBe(firstElems[0]);
+      // Changed element gets a new clone.
+      expect(secondElems[1]).not.toBe(firstElems[1]);
+      expect(secondElems[1]).toEqual({ id: 3 });
+    });
+
+    test('Set of arrays shares unchanged array element clones', () => {
+      const inner = { x: 1 };
+      const live = new Set([[inner]]);
+      const first = snapshot(live, undefined) as Set<unknown>;
+      const second = snapshot(live, first) as Set<unknown>;
+
+      expect(second).toBe(first);
+      const firstArr = Array.from(first)[0] as unknown[];
+      const secondArr = Array.from(second)[0] as unknown[];
+      expect(secondArr).toBe(firstArr);
+      // Nested object clone is also shared.
+      expect(secondArr[0]).toBe(firstArr[0]);
+    });
+  });
 });
