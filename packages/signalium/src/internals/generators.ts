@@ -7,6 +7,7 @@ import { isPromise } from './utils/type-utils.js';
 export function generatorResultToPromiseWithConsumer<T>(
   generator: Generator<any, T>,
   savedConsumer: ReactiveSignal<any, any> | undefined,
+  runEpoch: number,
 ): Promise<T> {
   function adopt(value: any) {
     return typeof value === 'object' && value !== null && (isPromise(value) || isReactivePromise(value))
@@ -19,7 +20,14 @@ export function generatorResultToPromiseWithConsumer<T>(
       const prevConsumer = getCurrentConsumer();
 
       try {
-        setCurrentConsumer(savedConsumer);
+        // If the owning run has been superseded (a newer run bumped
+        // savedConsumer.computedCount past runEpoch), continue the remaining
+        // steps untracked so they cannot register dependency edges/subs that
+        // would be attributed to the current (new) run and trigger spurious
+        // recomputation when those deps later change.
+        const consumer =
+          savedConsumer !== undefined && savedConsumer.computedCount !== runEpoch ? undefined : savedConsumer;
+        setCurrentConsumer(consumer);
         const result = fn(value);
         if (result.done) {
           resolve(result.value);
