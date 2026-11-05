@@ -77,63 +77,78 @@ const flushWatchers = async () => {
 
   if (!flush) return;
 
-  // Flush all auto-pulled signals recursively, clearing
-  // the microtask queue until they are all settled
-  while (PENDING_ASYNC_PULLS.length > 0 || PENDING_PULLS.size > 0) {
-    const asyncPulls = PENDING_ASYNC_PULLS;
+  try {
+    // Flush all auto-pulled signals recursively, clearing
+    // the microtask queue until they are all settled
+    while (PENDING_ASYNC_PULLS.length > 0 || PENDING_PULLS.size > 0) {
+      const asyncPulls = PENDING_ASYNC_PULLS;
 
-    PENDING_ASYNC_PULLS = [];
+      PENDING_ASYNC_PULLS = [];
 
-    for (const pull of asyncPulls) {
-      checkSignal(pull);
+      for (const pull of asyncPulls) {
+        checkSignal(pull);
+      }
+
+      const pulls = PENDING_PULLS;
+
+      PENDING_PULLS = new Set();
+
+      for (const pull of pulls) {
+        checkAndRunListeners(pull);
+      }
+
+      // This is used to tell the scheduler to wait if any async values have been resolved
+      // since the last tick. If they have, we wait an extra microtask to ensure that the
+      // async values have recursivey flushed before moving on to pulling watchers.
+
+      await microtask();
     }
 
-    const pulls = PENDING_PULLS;
+    // Clear the flush so that if any more watchers are scheduled,
+    // they will be flushed in the next tick
+    currentFlush = null;
 
-    PENDING_PULLS = new Set();
+    runBatch(() => {
+      try {
+        for (const [signal, options] of PENDING_DEACTIVE) {
+          deactivateSignal(signal, options);
+        }
 
-    for (const pull of pulls) {
-      checkAndRunListeners(pull);
-    }
+        for (const signal of PENDING_LISTENERS) {
+          if (signal instanceof ReactiveSignal) {
+            runDerivedListeners(signal as any);
+          } else {
+            runStateListeners(signal as any);
+          }
+        }
 
-    // This is used to tell the scheduler to wait if any async values have been resolved
-    // since the last tick. If they have, we wait an extra microtask to ensure that the
-    // async values have recursivey flushed before moving on to pulling watchers.
-
-    await microtask();
+        if (IS_DEV) {
+          for (const tracer of PENDING_TRACERS!) {
+            tracer.flush();
+          }
+        }
+      } finally {
+        // Clear the pending queues even if a listener, deactivation, or tracer
+        // throws. Without this, a throwing signal would remain in the queue and
+        // rethrow on every subsequent flush, permanently poisoning the scheduler.
+        PENDING_DEACTIVE.clear();
+        PENDING_LISTENERS = [];
+        if (IS_DEV) {
+          PENDING_TRACERS = [];
+        }
+      }
+    });
+  } finally {
+    // Always release the flush handle and settle the flush promise, even when a
+    // user compute/listener/deactivation throws. Without this guard, a throw would
+    // leave `currentFlush` set (so every subsequent `scheduleFlush` is a no-op and
+    // the scheduler is permanently wedged) and the flush promise unresolved (so any
+    // `settled()` awaiter would hang forever). `currentFlush = null` is idempotent
+    // here: on the happy path it was already cleared above before `runBatch`; this
+    // covers the error path where the throw escapes before that line runs.
+    currentFlush = null;
+    flush.resolve();
   }
-
-  // Clear the flush so that if any more watchers are scheduled,
-  // they will be flushed in the next tick
-  currentFlush = null;
-
-  runBatch(() => {
-    for (const [signal, options] of PENDING_DEACTIVE) {
-      deactivateSignal(signal, options);
-    }
-
-    PENDING_DEACTIVE.clear();
-
-    for (const signal of PENDING_LISTENERS) {
-      if (signal instanceof ReactiveSignal) {
-        runDerivedListeners(signal as any);
-      } else {
-        runStateListeners(signal as any);
-      }
-    }
-
-    if (IS_DEV) {
-      for (const tracer of PENDING_TRACERS!) {
-        tracer.flush();
-      }
-      PENDING_TRACERS = [];
-    }
-
-    PENDING_LISTENERS = [];
-  });
-
-  // resolve the flush promise
-  flush.resolve();
 };
 
 export const settled = async () => {
