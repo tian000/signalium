@@ -734,7 +734,11 @@ export function createPromise<T>(promise: Promise<T>, signal: ReactiveSignal<T, 
   return p;
 }
 
-export function createRelay<T>(activate: RelayActivate<T>, scope: SignalScope, opts?: ReactiveOptions<T, unknown[]>) {
+export function createRelay<T>(
+  activate: RelayActivate<T>,
+  scope: SignalScope | undefined,
+  opts?: ReactiveOptions<T, unknown[]>,
+) {
   const p = new ReactivePromiseImpl<T>();
 
   let active = false;
@@ -810,7 +814,7 @@ export function createRelay<T>(activate: RelayActivate<T>, scope: SignalScope, o
 
 export function createTask<T, Args extends unknown[]>(
   task: (...args: Args) => Promise<T>,
-  scope: SignalScope,
+  scope: SignalScope | undefined,
   opts?: ReactiveOptions<T, Args>,
 ): ReactiveTask<T, Args> {
   const p = new ReactivePromiseImpl<T>();
