@@ -148,7 +148,7 @@ export class ReactiveSignal<T, Args extends unknown[]> {
     if (IS_DEV) {
       this.tracerMeta = {
         id: def.id ?? key ?? hashValue([def.compute, ID++]),
-        desc: def.desc ?? def.compute.name ?? getUnknownSignalFnName(def.compute),
+        desc: def.desc || def.compute.name || getUnknownSignalFnName(def.compute),
         params: args.map(arg => stringifyValue(arg)).join(', '),
         tracer: def.tracer,
       };

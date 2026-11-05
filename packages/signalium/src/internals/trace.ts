@@ -323,12 +323,12 @@ export class Tracer {
     if (event.type === TracerEventType.Connected || event.type === TracerEventType.ConsumeState) {
       const node = this.nodeMap.get(event.id);
 
-      if (!node || (event.type === TracerEventType.Connected && !event.name)) {
+      if (!node) {
         return;
       }
 
       if (!this.nodeMap.has(event.childId)) {
-        const name = event.type === TracerEventType.Connected ? event.name : undefined;
+        const name = event.type === TracerEventType.Connected ? event.name || String(event.childId) : undefined;
         const params = event.type === TracerEventType.Connected ? event.params : undefined;
         const nodeType = event.type === TracerEventType.Connected ? event.nodeType : SignalType.State;
 
