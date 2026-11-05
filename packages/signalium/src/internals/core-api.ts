@@ -89,8 +89,11 @@ export function watcher<T>(fn: () => T, opts?: SignalOptions<T> & { isolate?: bo
   const def = createReactiveDefinition(opts?.id, opts?.desc, fn, opts?.equals, false, undefined, opts?.tracer);
 
   const scope = opts?.isolate ? new SignalScope([]) : getCurrentScope();
+  const signal = createReactiveSignal(def, undefined, undefined, scope);
 
-  return createReactiveSignal(def, undefined, undefined, scope);
+  scope.registerWatcher(signal);
+
+  return signal;
 }
 
 /**
@@ -108,6 +111,9 @@ export const reactiveSignal = <T>(
   const def = createReactiveDefinition(opts?.id, opts?.desc, compute, opts?.equals, false, undefined, undefined);
 
   const scope = opts?.isolate ? new SignalScope([]) : getCurrentScope();
+  const signal = createReactiveSignal(def, undefined, undefined, scope);
 
-  return createReactiveSignal(def, undefined, undefined, scope);
+  scope.registerWatcher(signal);
+
+  return signal;
 };

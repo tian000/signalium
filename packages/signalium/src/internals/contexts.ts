@@ -82,6 +82,10 @@ export class SignalScope {
   private contexts: Record<symbol, unknown>;
   private children = new Map<number, SignalScope>();
   private signals = new Map<number, WeakRef<ReactiveSignal<any, any>>>();
+  // Signals created outside the scope's signal cache (watchers/reactiveSignals)
+  // that read contexts directly. Tracked so `setContexts` can dirty them, since
+  // context reads are not reactive edges and would otherwise never be notified.
+  private watchers = new Set<WeakRef<ReactiveSignal<any, any>>>();
 
   setContexts(contexts: [ContextImpl<unknown>, unknown][]) {
     for (const [context, value] of contexts) {
@@ -92,7 +96,43 @@ export class SignalScope {
       }
     }
 
+    this.invalidate();
+  }
+
+  /**
+   * Propagate a context change to all live signals and cached child scopes so
+   * existing subscribers recompute with the updated values. Context reads are
+   * not edges in the reactive graph, so without this live consumers (watchers,
+   * other signals' deps, in-flight computations) keep serving stale values and
+   * fire zero notifications.
+   */
+  private invalidate(): void {
+    for (const ref of this.signals.values()) {
+      const signal = ref.deref();
+      if (signal) dirtySignal(signal);
+    }
     this.signals.clear();
+
+    if (this.watchers.size > 0) {
+      const live: WeakRef<ReactiveSignal<any, any>>[] = [];
+      for (const ref of this.watchers) {
+        const signal = ref.deref();
+        if (signal) {
+          dirtySignal(signal);
+          live.push(ref);
+        }
+      }
+      this.watchers = new Set(live);
+    }
+
+    for (const child of this.children.values()) {
+      child.invalidate();
+    }
+  }
+
+  /** Track a signal created outside the scope's signal cache (e.g. a watcher). */
+  registerWatcher(signal: ReactiveSignal<any, any>): void {
+    this.watchers.add(signal.ref);
   }
 
   getChild(contexts: [ContextImpl<unknown>, unknown][]) {
