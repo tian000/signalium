@@ -73,6 +73,11 @@ export class ReactivePromiseImpl<T> {
   private _equals: Equals<T> = DEFAULT_EQUALS as Equals<T>;
   private _promise: Promise<T> | undefined;
 
+  // Incremented on every direct settle (_setValue / _setError) so that an
+  // in-flight _setPromise continuation can detect that a newer settle has
+  // superseded the tracked promise and bail out before overwriting state.
+  private _settleGeneration = 0;
+
   private _pending: PendingResolve<T>[] = [];
 
   private _stateSubs = new Map<WeakRef<ReactiveSignal<unknown, unknown[]>>, number>();
@@ -420,6 +425,11 @@ export class ReactivePromiseImpl<T> {
 
     const flags = this._flags;
     let awaitSubs = this._awaitSubs;
+    // Capture the settle generation so we can detect if a direct settle
+    // (_setValue / _setError) has superseded this promise while we were
+    // awaiting. Without this, a stale continuation would overwrite the newer
+    // directly-set value/error when its promise finally resolves.
+    const generation = this._settleGeneration;
 
     try {
       // If we were not already pending, we need to propagate the dirty state to any
@@ -430,13 +440,13 @@ export class ReactivePromiseImpl<T> {
 
       const nextValue = await promise;
 
-      if (promise !== this._promise) {
+      if (promise !== this._promise || generation !== this._settleGeneration) {
         return;
       }
 
       this._setValue(nextValue, awaitSubs);
     } catch (nextError) {
-      if (promise !== this._promise) {
+      if (promise !== this._promise || generation !== this._settleGeneration) {
         return;
       }
 
@@ -445,6 +455,7 @@ export class ReactivePromiseImpl<T> {
   }
 
   private _setValue(nextValue: T, awaitSubs = this._awaitSubs) {
+    this._settleGeneration++;
     let flags = this._flags;
     let value = this._value;
 
@@ -492,6 +503,7 @@ export class ReactivePromiseImpl<T> {
   }
 
   private _setError(nextError: unknown, awaitSubs = this._awaitSubs) {
+    this._settleGeneration++;
     let error = this._error;
 
     let notifyFlags = 0;
