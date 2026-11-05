@@ -161,7 +161,7 @@ export function runSignal(signal: ReactiveSignal<any, any[]>) {
 
     if (nextValue !== null && typeof nextValue === 'object') {
       if (isGeneratorResult(nextValue)) {
-        nextValue = generatorResultToPromiseWithConsumer(nextValue, signal);
+        nextValue = generatorResultToPromiseWithConsumer(nextValue, signal, computedCount);
         valueIsPromise = true;
       } else if (isPromise(nextValue)) {
         valueIsPromise = true;

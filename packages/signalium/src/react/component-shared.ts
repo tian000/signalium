@@ -37,7 +37,7 @@ export function createServerAsyncComponentWrapper<P extends object>(
       undefined,
       scope,
     );
-    return generatorResultToPromiseWithConsumer(fn(props), owned);
+    return generatorResultToPromiseWithConsumer(fn(props), owned, owned.computedCount);
   };
 }
 
