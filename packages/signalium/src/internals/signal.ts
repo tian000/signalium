@@ -77,6 +77,8 @@ export class StateSignal<T> implements Signal<T> {
   notify(): void {
     const { _subs: subs } = this;
 
+    let error: unknown;
+
     for (const [subRef, consumedAt] of subs.entries()) {
       const sub = subRef.deref();
 
@@ -84,12 +86,26 @@ export class StateSignal<T> implements Signal<T> {
         continue;
       }
 
-      dirtySignal(sub);
+      // Catch per-subscriber so a guard violation on one subscriber does not
+      // truncate the fan-out: remaining subscribers are still dirtied, _subs
+      // is still cleared, and listeners are still scheduled. The first error
+      // is saved and rethrown after the loop completes.
+      try {
+        dirtySignal(sub);
+      } catch (e) {
+        if (error === undefined) {
+          error = e;
+        }
+      }
     }
 
     this._subs.clear();
 
     scheduleListeners(this);
+
+    if (error !== undefined) {
+      throw error;
+    }
   }
 
   addListener(listener: () => void): () => void {
