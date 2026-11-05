@@ -19,7 +19,7 @@ function isPlainArray(arr: unknown): arr is unknown[] {
   return Array.isArray(arr);
 }
 
-export function stringifyValue(value: unknown): string {
+export function stringifyValue(value: unknown, seen: unknown[] = []): string {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
 
@@ -37,15 +37,29 @@ export function stringifyValue(value: unknown): string {
         return value.toISOString();
       }
       if (isPlainArray(value)) {
-        return `[${value.map(stringifyValue).join(',')}]`;
+        const index = seen.indexOf(value);
+        if (index !== -1) {
+          return `[Circular: ${index}]`;
+        }
+        seen.push(value);
+        const result = `[${value.map(v => stringifyValue(v, seen)).join(',')}]`;
+        seen.pop();
+        return result;
       }
       if (isPOJO(value)) {
+        const index = seen.indexOf(value);
+        if (index !== -1) {
+          return `[Circular: ${index}]`;
+        }
+        seen.push(value);
         const entries = [
           ...Object.entries(value),
           ...Object.getOwnPropertySymbols(value).map(sym => [sym, value[sym as keyof typeof value]]),
         ].sort(([a], [b]) => (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0));
 
-        return `{ ${entries.map(([k, v]) => `${String(k)}: ${stringifyValue(v)}`).join(', ')} }`;
+        const result = `{ ${entries.map(([k, v]) => `${String(k)}: ${stringifyValue(v, seen)}`).join(', ')} }`;
+        seen.pop();
+        return result;
       }
       return getObjectId(value);
     }
