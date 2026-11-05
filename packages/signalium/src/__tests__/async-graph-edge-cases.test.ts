@@ -290,6 +290,162 @@ describe('rejected async reactive whose awaited dependency re-resolves', () => {
   });
 });
 
+describe('state write during pending + equal-value resolution', () => {
+  test('consumer recomputes when a state dependency written mid-flight is followed by equal-value promise resolution', async () => {
+    const state1 = signal(10);
+    const innerTrigger = signal(0);
+
+    let deferred = Promise.withResolvers<number>();
+
+    const inner = reactive(
+      async () => {
+        void innerTrigger.value;
+        return await deferred.promise;
+      },
+      { desc: 'inner' },
+    );
+
+    const outer = reactive(
+      async () => {
+        const s = state1.value;
+        const v = await inner();
+        return s + v;
+      },
+      { desc: 'outer' },
+    );
+
+    // First full evaluation: resolve deferred to 1
+    const r1 = outer();
+    expect(r1.isPending).toBe(true);
+    deferred.resolve(1);
+    await sleep(10);
+    expect(r1.isResolved).toBe(true);
+    expect(r1.value).toBe(11); // 10 + 1
+
+    // Swap in a new pending deferred and trigger inner recompute
+    deferred = Promise.withResolvers<number>();
+    innerTrigger.value = 1;
+    inner(); // pull inner — it recomputes and halts on the new pending deferred
+
+    // Pull outer — checkSignal walks the chain, sees the pending promise
+    // edge, and halts → outer = Pending
+    const r2 = outer();
+    expect(r2.isPending).toBe(true);
+
+    // Write state1 while outer is pending — StateSignal.notify() sets
+    // outer = Dirty (direct-dirty protocol, no edges)
+    state1.value = 21;
+
+    // Resolve the new deferred to 1 — EQUAL to the previous value.
+    // The Dirty from the mid-flight write must survive the equal-value
+    // resolution and trigger a recompute.
+    deferred.resolve(1);
+    await sleep(20);
+
+    expect(r2.isResolved).toBe(true);
+    expect(r2.value).toBe(22); // 21 + 1
+  });
+
+  test('subsequent state writes propagate after equal-value resolution recompute', async () => {
+    const state1 = signal(10);
+    const innerTrigger = signal(0);
+
+    let deferred = Promise.withResolvers<number>();
+
+    const inner = reactive(
+      async () => {
+        void innerTrigger.value;
+        return await deferred.promise;
+      },
+      { desc: 'inner' },
+    );
+
+    const outer = reactive(
+      async () => {
+        const s = state1.value;
+        const v = await inner();
+        return s + v;
+      },
+      { desc: 'outer' },
+    );
+
+    // First full evaluation
+    const r1 = outer();
+    deferred.resolve(1);
+    await sleep(10);
+    expect(r1.value).toBe(11);
+
+    // Swap deferred, trigger inner, pull outer (halts in Pending)
+    deferred = Promise.withResolvers<number>();
+    innerTrigger.value = 1;
+    inner();
+    const r2 = outer();
+    expect(r2.isPending).toBe(true);
+
+    // Write state1 while pending, resolve to equal value
+    state1.value = 21;
+    deferred.resolve(1);
+    await sleep(20);
+    expect(r2.value).toBe(22);
+
+    // Subsequent write to state1 should propagate (subscription re-established
+    // by the recompute above)
+    state1.value = 30;
+    const r3 = outer();
+    await sleep(20);
+    expect(r3.value).toBe(31); // 30 + 1
+  });
+
+  test('no state write + equal-value resolution does NOT recompute (existing behavior preserved)', async () => {
+    let innerCount = 0;
+    let outerCount = 0;
+
+    const a = signal(1);
+    const b = signal(2);
+
+    const inner = reactive(
+      async () => {
+        innerCount++;
+        const sum = a.value + b.value;
+        await nextTick();
+        return sum;
+      },
+      { desc: 'inner' },
+    );
+
+    const outer = reactive(
+      async () => {
+        outerCount++;
+        const v = await inner();
+        return v + 1;
+      },
+      { desc: 'outer' },
+    );
+
+    const r1 = outer();
+    expect(r1.isPending).toBe(true);
+    await sleep(10);
+    expect(r1.value).toBe(4); // (1 + 2) + 1
+    expect(innerCount).toBe(1);
+    expect(outerCount).toBe(1);
+
+    // Change dependencies so inner goes pending but resolves to the SAME value
+    a.value = 2;
+    b.value = 1;
+
+    const r2 = outer();
+    expect(r2.isPending).toBe(true);
+    expect(outerCount).toBe(1);
+
+    await sleep(10);
+    expect(r2.isPending).toBe(false);
+    expect(r2.isResolved).toBe(true);
+    expect(r2.value).toBe(4);
+    expect(innerCount).toBe(2);
+    expect(outerCount).toBe(1); // outer does NOT rerun
+  });
+});
+
 describe('combinatorial sync/async tree chaos tests', () => {
   type NodeKind = 'sync' | 'async';
 
