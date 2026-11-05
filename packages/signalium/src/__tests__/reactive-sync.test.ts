@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { signal, reactive as _reactive, reactiveSignal } from '../index.js';
+import { signal, reactive as _reactive, reactiveSignal, watcher } from '../index.js';
 import { reactive } from './utils/instrumented-hooks.js';
+import { nextTick } from './utils/async.js';
 
 describe('reactive (sync)', () => {
   test('Basic computed works', () => {
@@ -160,5 +161,65 @@ describe('reactive (sync)', () => {
 
     expect(selfMutator.value).toBe(0);
     expect(computeCount).toBe(1);
+  });
+
+  test('mid-computation dirty + same-pass re-read of a reactive dep keeps the consumer subscribed', async () => {
+    const s = signal(0);
+
+    const derived = reactiveSignal(() => s.value * 10);
+
+    const consumer = reactiveSignal(() => {
+      void derived.value; // first read, registers subscription
+      if (s.value === 0) {
+        s.value = 1; // dirties `derived` mid-computation, clears its subs
+      }
+      return derived.value; // same-pass re-read hits the else branch
+    });
+
+    const unsub = (consumer as any).addListener(() => {});
+
+    // The mid-pass mutation is absorbed into the same pass (s becomes 1, derived recomputes to 10)
+    expect(consumer.value).toBe(10);
+    await nextTick();
+
+    // Future push: derived recomputes to 20, and the consumer must still be subscribed
+    s.value = 2;
+    await nextTick();
+
+    expect(derived.value).toBe(20);
+    expect(consumer.value).toBe(20);
+
+    unsub();
+  });
+
+  test('mid-computation dirty + same-pass re-read: watcher listener keeps firing after the fix', async () => {
+    const s = signal(0);
+
+    const derived = reactiveSignal(() => s.value * 10);
+
+    const consumer = reactiveSignal(() => {
+      void derived.value; // first read, registers subscription
+      if (s.value === 0) {
+        s.value = 1; // dirties `derived` mid-computation, clears its subs
+      }
+      return derived.value; // same-pass re-read hits the else branch
+    });
+
+    const listenerValues: number[] = [];
+    const w = watcher(() => consumer.value);
+    const unsub = w.addListener(() => {
+      listenerValues.push(w.value);
+    });
+
+    await nextTick();
+    expect(w.value).toBe(10);
+
+    s.value = 2;
+    await nextTick();
+
+    expect(w.value).toBe(20);
+    expect(listenerValues).toContain(20);
+
+    unsub();
   });
 });

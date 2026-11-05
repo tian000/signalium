@@ -45,6 +45,7 @@ export function getSignal<T, Args extends unknown[]>(signal: ReactiveSignal<T, A
 
       if (prevEdge !== undefined) {
         prevEdge.updatedAt = updatedAt;
+        signal.subs.set(ref, prevEdge);
       }
     }
   } else {
