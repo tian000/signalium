@@ -43,13 +43,15 @@ Stable hash for arbitrary values. Values are hashed semi-deeply, meaning that ob
 ```ts
 export function registerCustomHash<T>(
   ctor: { new (): T },
-  hashFn: (obj: T) => number,
+  hashFn: (obj: T, seen: unknown[]) => number,
 ): void;
 ```
 
 Provide a custom hash for a prototype. This is useful for hashing class instances, which are hashed by reference by default.
 
-| Parameter | Type                 | Description                               |
-| --------- | -------------------- | ----------------------------------------- |
-| ctor      | `{ new(): T }`       | Constructor whose prototype gets the hash |
-| hashFn    | `(obj: T) => number` | Hash function                             |
+The `hashFn` receives the instance and a `seen` array used to detect cycles across recursive hashing. When delegating to `hashValue` for nested object-valued fields, forward `seen` so that cyclic object graphs (parent pointers, linked structures, graphs) are detected instead of recursing until a stack overflow.
+
+| Parameter | Type                              | Description                                              |
+| --------- | --------------------------------- | -------------------------------------------------------- |
+| ctor      | `{ new(): T }`                    | Constructor whose prototype gets the hash                |
+| hashFn    | `(obj: T, seen: unknown[]) => number` | Hash function; forward `seen` to nested `hashValue` calls |
