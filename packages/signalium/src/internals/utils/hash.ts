@@ -202,8 +202,8 @@ const PROTO_TO_HASH = new Map<object, (obj: any, seen: unknown[]) => number>([
   [RegExp.prototype, hashRegExp],
 ]);
 
-export const registerCustomHash = <T>(ctor: new (...args: any[]) => T, hashFn: (obj: T) => number) => {
-  PROTO_TO_HASH.set(ctor.prototype, (obj, _seen) => hashFn(obj));
+export const registerCustomHash = <T>(ctor: new (...args: any[]) => T, hashFn: (obj: T, seen: unknown[]) => number) => {
+  PROTO_TO_HASH.set(ctor.prototype, (obj, seen) => hashFn(obj, seen));
 };
 
 export function hashValue(node: unknown, seen: unknown[] = []) {

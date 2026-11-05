@@ -20,8 +20,8 @@ class Foo {
   b = 2;
 }
 
-registerCustomHash(Foo, (foo) => {
-  return hashValue([foo.a, foo.b]);
+registerCustomHash(Foo, (foo, seen) => {
+  return hashValue([foo.a, foo.b], seen);
 });
 
 const log = reactive((obj) => {
@@ -31,6 +31,8 @@ const log = reactive((obj) => {
 log(new Foo()); // 1
 log(new Foo()); //
 ```
+
+The hash function receives a `seen` array used to detect cycles across recursive hashing. When delegating to `hashValue` for nested object-valued fields, forward `seen` so that cyclic object graphs (parent pointers, linked structures, graphs) are detected instead of recursing until a stack overflow.
 
 If you want to have more fine-grained control over parameter equality, you can pass a `paramKey` function to the Reactive Function definition. This function should generate a _unique string key_ for the parameters it receives, but other than that has no constraints.
 

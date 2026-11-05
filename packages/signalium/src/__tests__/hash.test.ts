@@ -355,6 +355,119 @@ describe('hashValue', () => {
       expect(hashValue(p1a)).toBe(hashValue(p1b));
       expect(hashValue(p1a)).not.toBe(hashValue(p2));
     });
+
+    // Acyclic control: a deep chain through a custom-hashed class that delegates
+    // to hashValue must terminate. This proves any crash below is cycle-specific,
+    // not depth-related.
+    test('acyclic chain through a custom-hashed class terminates', () => {
+      class Node {
+        child: Node | null = null;
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Node, (n, seen) => (n.child ? (n.value + hashValue(n.child, seen)) | 0 : n.value));
+
+      let head: Node | null = null;
+      for (let i = 0; i < 50; i++) {
+        const node = new Node(i);
+        node.child = head;
+        head = node;
+      }
+
+      expect(() => hashValue(head)).not.toThrow();
+    });
+  });
+
+  describe('custom hash cycle detection', () => {
+    // A custom-hashed class that delegates to hashValue on a self-referential
+    // field must not stack-overflow. Before threading `seen` through, the
+    // wrapper discarded the cycle-tracking array and this recursed forever.
+    test('self-referential custom-hashed class does not stack overflow', () => {
+      class Node {
+        child: Node | null = null;
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Node, (n, seen) => (n.child ? (n.value + hashValue(n.child, seen)) | 0 : n.value));
+
+      const a = new Node(1);
+      a.child = a;
+
+      expect(() => hashValue(a)).not.toThrow();
+    });
+
+    test('self-referential custom-hashed class is deterministic', () => {
+      class Node {
+        child: Node | null = null;
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Node, (n, seen) => (n.child ? (n.value + hashValue(n.child, seen)) | 0 : n.value));
+
+      const a = new Node(1);
+      a.child = a;
+
+      expect(hashValue(a)).toBe(hashValue(a));
+    });
+
+    test('two-node cycle through a custom-hashed class does not stack overflow', () => {
+      class Node {
+        child: Node | null = null;
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Node, (n, seen) => (n.child ? (n.value + hashValue(n.child, seen)) | 0 : n.value));
+
+      const a = new Node(1);
+      const b = new Node(2);
+      a.child = b;
+      b.child = a;
+
+      expect(() => hashValue(a)).not.toThrow();
+    });
+
+    test('two-node cycle through a custom-hashed class is deterministic', () => {
+      class Node {
+        child: Node | null = null;
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Node, (n, seen) => (n.child ? (n.value + hashValue(n.child, seen)) | 0 : n.value));
+
+      const a = new Node(1);
+      const b = new Node(2);
+      a.child = b;
+      b.child = a;
+
+      expect(hashValue(a)).toBe(hashValue(a));
+    });
+
+    // A cycle that leaves the custom-hashed class, passes through a plain
+    // object, and re-enters the custom-hashed class must also be detected.
+    test('cycle through a plain object back into a custom-hashed class does not stack overflow', () => {
+      class Node {
+        parent: Record<string, unknown> | null = null;
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Node, (n, seen) => (n.parent ? (n.value + hashValue(n.parent, seen)) | 0 : n.value));
+
+      const a = new Node(1);
+      a.parent = { back: a };
+
+      expect(() => hashValue(a)).not.toThrow();
+    });
+
+    // Mirrors the built-in "sibling references" test: seen.pop() must restore
+    // state between siblings so that two references to the same custom-hashed
+    // instance are not mistaken for a cycle.
+    test('sibling references to the same custom-hashed instance are not treated as cycles', () => {
+      class Leaf {
+        constructor(public value: number) {}
+      }
+      registerCustomHash(Leaf, (l, seen) => hashValue(l.value, seen));
+
+      const shared = new Leaf(1);
+      const withSiblings = { a: shared, b: shared };
+      const withoutSiblings = { a: shared, b: new Leaf(1) };
+
+      expect(() => hashValue(withSiblings)).not.toThrow();
+      expect(hashValue(withSiblings)).toBe(hashValue(withoutSiblings));
+    });
   });
 
   describe('output stability', () => {
