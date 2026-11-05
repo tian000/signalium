@@ -741,6 +741,75 @@ describe('React > useReactive (deep, default)', () => {
 
       expect(snapshots[snapshots.length - 1]).toBe(first);
     });
+
+    test('Set of objects returns same reference when unchanged', async () => {
+      const trigger = signal(0);
+      const stableSet = new Set([{ a: 1 }, { b: 2 }]);
+      const derived = reactive(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        trigger.value;
+        return stableSet;
+      });
+
+      const snapshots: unknown[] = [];
+
+      function Component(): React.ReactNode {
+        const result = useReactive(() => derived());
+        snapshots.push(result);
+        return <div data-testid="out">{Array.from(result as Set<{ a?: number; b?: number }>).length}</div>;
+      }
+
+      const { getByTestId } = render(<Component />);
+
+      await expect.element(getByTestId('out')).toHaveTextContent('2');
+      const first = snapshots[snapshots.length - 1];
+      const firstElems = Array.from(first as Set<unknown>);
+
+      trigger.value = 1;
+      await sleep(50);
+
+      const second = snapshots[snapshots.length - 1];
+      // Set reference must be stable across unchanged snapshots.
+      expect(second).toBe(first);
+      // Element clones must also be structurally shared, not re-cloned.
+      const secondElems = Array.from(second as Set<unknown>);
+      expect(secondElems[0]).toBe(firstElems[0]);
+      expect(secondElems[1]).toBe(firstElems[1]);
+    });
+
+    test('Set of objects re-uses unchanged element clones when one element changes', async () => {
+      const flag = signal(false);
+      const obj1 = { id: 1 };
+      const derived = reactive(() => new Set([obj1, flag.value ? { id: 3 } : { id: 2 }]));
+
+      const snapshots: Array<Set<unknown>> = [];
+
+      function Component(): React.ReactNode {
+        const result = useReactive(() => derived()) as Set<unknown>;
+        snapshots.push(result);
+        const elems = Array.from(result) as Array<{ id: number }>;
+        return <div data-testid="out">{elems.map(e => e.id).join(',')}</div>;
+      }
+
+      const { getByTestId } = render(<Component />);
+
+      await expect.element(getByTestId('out')).toHaveTextContent('1,2');
+      const first = snapshots[snapshots.length - 1];
+      const firstElems = Array.from(first);
+
+      flag.value = true;
+
+      await expect.element(getByTestId('out')).toHaveTextContent('1,3');
+
+      const second = snapshots[snapshots.length - 1];
+      const secondElems = Array.from(second);
+
+      expect(second).not.toBe(first);
+      // Unchanged element's clone is re-used.
+      expect(secondElems[0]).toBe(firstElems[0]);
+      // Changed element gets a new clone.
+      expect(secondElems[1]).not.toBe(firstElems[1]);
+    });
   });
 
   describe('registerCustomSnapshot', () => {
