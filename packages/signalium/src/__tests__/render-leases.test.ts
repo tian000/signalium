@@ -392,6 +392,22 @@ describe('render leases', () => {
     expect(counts.active).toBe(0);
   });
 
+  test('a lease pinned for a thrown thenable React abandons is released after the hold', async () => {
+    const shortTtl = 10;
+    setConfig({ renderLeaseTtl: shortTtl });
+    const { counts, derived } = createRelayHarness();
+
+    renderRead(derived);
+    holdLeaseUntilSettled(derived, new Promise<void>(() => {}));
+
+    await sleep(shortTtl * 3);
+    expect(counts.active).toBe(1);
+
+    await sleep(shortTtl * (SUSPENDED_LEASE_HOLD_TTLS + 2) + 50);
+    await flush();
+    expect(counts.active).toBe(0);
+  });
+
   test('a lease claimed while suspended is not renewed when the thenable settles', async () => {
     const { counts, derived } = createRelayHarness();
     let resolve!: () => void;
