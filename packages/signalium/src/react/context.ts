@@ -1,5 +1,5 @@
 import { createContext, useContext as useReactContext } from 'react';
-import { ContextImpl, SignalScope } from '../internals/contexts.js';
+import { ContextImpl, getInternalCurrentScope, SignalScope } from '../internals/contexts.js';
 import { getCurrentConsumer } from '../internals/consumer.js';
 import { Context } from '../types.js';
 
@@ -11,7 +11,7 @@ export function useScope() {
 
 export function useContext<T>(context: Context<T>): T {
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const scope = getCurrentConsumer()?.scope ?? useScope();
+  const scope = getInternalCurrentScope() ?? getCurrentConsumer()?.scope ?? useScope();
 
   if (!scope) {
     throw new Error('useContext must be used within a signal hook, a withContext, or a component');
