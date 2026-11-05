@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { reactive, relay, signal } from 'signalium';
 import { setConfig } from 'signalium/config';
 import { component, PauseSignalsProvider, useReactive, useReactiveShallow } from 'signalium/react';
+import { SUSPENDED_LEASE_HOLD_TTLS } from '../../internals/lease.js';
 import { sleep } from '../../__tests__/utils/async.js';
 
 /**
@@ -462,6 +463,58 @@ describe('React > render leases', () => {
       await settle();
       console.log(`[leases] suspended mount useReactive: leaked ${leakedBeforeTtl} -> ${counts.activeRelays}`);
       expect(counts.activeRelays).toBe(0);
+    });
+
+    test('async component() abandoned while suspended on a never-settling thenable releases its lease after the hold', async () => {
+      const { counts, leafRelay } = createHarness();
+      // A gate that never settles, like a relay whose source subscription never emits.
+      const gate = new Promise<void>(() => {});
+      let show: (value: boolean) => void = () => {};
+
+      const Leaf = component(async ({ id }: { id: number }) => {
+        counts.bodyRuns++;
+        const value = leafRelay(id).value;
+        await gate;
+        return <span data-testid={`leaf-${id}`}>{value}</span>;
+      });
+
+      function Host() {
+        const [visible, setVisible] = useState(true);
+        show = setVisible;
+        return (
+          <Suspense fallback={<span data-testid="fallback">loading</span>}>
+            {visible ? <Leaf id={1} /> : <span data-testid="empty">empty</span>}
+          </Suspense>
+        );
+      }
+
+      // A short TTL keeps the hold bounded; the backstop is TTL * SUSPENDED_LEASE_HOLD_TTLS.
+      const shortTtl = 20;
+      setConfig({ renderLeaseTtl: shortTtl });
+      try {
+        const { getByTestId } = render(<Host />);
+        await expect.element(getByTestId('fallback')).toBeInTheDocument();
+        await settle();
+        expect(counts.activeRelays).toBe(1);
+
+        // Abandon the mount: hide the leaf while it is still suspended on the never-settling gate.
+        React.act(() => show(false));
+        await expect.element(getByTestId('empty')).toBeInTheDocument();
+        await settle();
+        expect(counts.activeRelays).toBe(1);
+
+        // Past the normal lease lifetime the pin still holds (the thenable never settled).
+        await sleep(shortTtl * 3);
+        await settle();
+        expect(counts.activeRelays).toBe(1);
+
+        // Past the suspended-lease hold the backstop ends the pin and the relay deactivates.
+        await sleep(shortTtl * (SUSPENDED_LEASE_HOLD_TTLS + 2) + 50);
+        await settle();
+        expect(counts.activeRelays).toBe(0);
+      } finally {
+        setConfig({ renderLeaseTtl: LEASE_TTL });
+      }
     });
   });
 

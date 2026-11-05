@@ -97,7 +97,9 @@ function unpinLease(signal: ReactiveSignal<any, any>, token: object) {
 
 /**
  * Pins a render lease until `thenable` settles. React retries a suspended render only then, which
- * can be later than the TTL.
+ * can be later than the TTL. If the render is abandoned and the thenable never settles, the pin
+ * ends after {@link SUSPENDED_LEASE_HOLD_TTLS} TTLs — the same backstop as `holdSuspendedLease`,
+ * since nothing reports the abandonment.
  */
 export function holdLeaseUntilSettled(signal: ReactiveSignal<any, any>, thenable: PromiseLike<unknown>) {
   const token = pinLease(signal);
@@ -107,6 +109,9 @@ export function holdLeaseUntilSettled(signal: ReactiveSignal<any, any>, thenable
   }
 
   const renew = () => unpinLease(signal, token);
+
+  const hold = setTimeout(renew, Math.min(getRenderLeaseTtl() * SUSPENDED_LEASE_HOLD_TTLS, MAX_TIMEOUT));
+  (hold as { unref?: () => void }).unref?.();
 
   thenable.then(renew, renew);
 }
