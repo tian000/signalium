@@ -70,6 +70,17 @@ function createSignaliumAsyncTransform(api: any, opts?: SignaliumAsyncTransformO
         if (funcParent?.node !== path.node) return;
         awaitPath.replaceWith(t.yieldExpression(awaitPath.node.argument));
       },
+      ForOfStatement(forOfPath) {
+        if (!forOfPath.node.await) return;
+        const funcParent = forOfPath.getFunctionParent();
+        if (funcParent?.node !== path.node) return;
+        throw forOfPath.buildCodeFrameError(
+          '`for await` loops cannot be used inside async functions passed to reactive(), ' +
+            'task(), relay(), callback(), component(), watcher(), retain(), etc. ' +
+            'Collect the async values into an array first, then iterate with a plain ' +
+            'for/of loop, or use individual `await` expressions instead.',
+        );
+      },
     });
 
     path.node.async = false;
