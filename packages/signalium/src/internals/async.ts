@@ -564,6 +564,18 @@ export class ReactivePromiseImpl<T> {
         continue;
       }
 
+      // Don't clobber a stronger `Dirty` state with `PendingDirty` on an
+      // equal-value (or equal-error) resolution. A `Dirty` set by a
+      // `StateSignal.notify()` during the pending window forces a full
+      // recompute via `checkSignal`; overwriting it with `PendingDirty` would
+      // only validate the dirty chain and clear pending, silently losing the
+      // mid-flight write and leaving the consumer stale (and detached from the
+      // state signal, since `notify()` clears its subscriber set).
+      if (!dirty && signal._state === ReactiveFnState.Dirty) {
+        scheduleAsyncPull(signal);
+        continue;
+      }
+
       signal._state = newState;
 
       scheduleAsyncPull(signal);
