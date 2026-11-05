@@ -56,7 +56,7 @@ export function withContexts<C extends unknown[], U>(contexts: [...ContextPair<C
 }
 
 export const getContext = <T>(context: Context<T>): T => {
-  const scope = CURRENT_SCOPE ?? getCurrentConsumer()?.scope;
+  const scope = CURRENT_SCOPE ?? getCurrentConsumer()?.scope ?? requestScopeGetter?.();
 
   if (scope === undefined) {
     throw new Error(
@@ -154,6 +154,21 @@ export const getInternalCurrentScope = () => {
 
 export const getCurrentScope = (fallback = GLOBAL_SCOPE): SignalScope => {
   return CURRENT_SCOPE ?? getCurrentConsumer()?.scope ?? requestScopeGetter?.() ?? fallback;
+};
+
+/**
+ * Returns the scope that is *explicitly* active at creation time — either the
+ * current `CURRENT_SCOPE` or the current reactive consumer's scope — without
+ * falling back to the request-scope getter or `GLOBAL_SCOPE`.
+ *
+ * Used by `task()` / `relay()` / `watcher()` / `reactiveSignal()` to decide
+ * whether to bind a definition-time scope or defer to per-invocation resolution.
+ * Returns `undefined` when the primitive is created outside any active
+ * request/consumer scope (e.g. at module top level), signalling that the scope
+ * should be resolved lazily at each invocation instead of being frozen.
+ */
+export const getCreationScope = (): SignalScope | undefined => {
+  return CURRENT_SCOPE ?? getCurrentConsumer()?.scope;
 };
 
 // ======= Owner =======

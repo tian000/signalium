@@ -1,6 +1,7 @@
 import { ReactiveValue } from '../types.js';
 import { createPromise, isReactivePromise, ReactivePromiseImpl } from './async.js';
 import { getCurrentConsumer, setCurrentConsumer } from './consumer.js';
+import { getCurrentScope, getInternalCurrentScope, setCurrentScope } from './contexts.js';
 import { createEdge, Edge, EdgeType } from './edge.js';
 import { generatorResultToPromiseWithConsumer } from './generators.js';
 import { ReactiveFnState, isRelay, ReactiveSignal } from './reactive.js';
@@ -147,12 +148,14 @@ export function runSignal(signal: ReactiveSignal<any, any[]>) {
   }
 
   const prevConsumer = getCurrentConsumer();
+  const prevScope = getInternalCurrentScope();
 
   const updatedCount = signal.updatedCount;
   const computedCount = ++signal.computedCount;
 
   try {
     setCurrentConsumer(signal);
+    setCurrentScope(signal.scope ?? getCurrentScope());
 
     const initialized = updatedCount !== 0;
     const prevValue = signal._value;
@@ -194,6 +197,7 @@ export function runSignal(signal: ReactiveSignal<any, any[]>) {
     }
   } finally {
     setCurrentConsumer(prevConsumer);
+    setCurrentScope(prevScope);
 
     if (IS_DEV) {
       tracer?.emit({

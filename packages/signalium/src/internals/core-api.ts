@@ -9,7 +9,7 @@ import {
   ReactiveFn,
   ReadonlySignal,
 } from '../types.js';
-import { getCurrentScope, getScopeOwner, SignalScope } from './contexts.js';
+import { getCurrentScope, getCreationScope, getScopeOwner, SignalScope } from './contexts.js';
 import {
   createReactiveDefinition,
   createReactiveSignal,
@@ -71,7 +71,7 @@ export const reactiveMethod = <T, Args extends unknown[]>(
 };
 
 export function relay<T>(activate: RelayActivate<T>, opts?: SignalOptions<T>): ReactivePromise<T> {
-  const scope = getCurrentScope();
+  const scope = getCreationScope();
 
   return createRelay(activate, scope, opts) as unknown as ReactivePromise<T>;
 }
@@ -80,7 +80,7 @@ export const task = <T, Args extends unknown[]>(
   fn: (...args: Args) => Promise<T>,
   opts?: SignalOptions<T>,
 ): ReactiveTask<T, Args> => {
-  const scope = getCurrentScope();
+  const scope = getCreationScope();
 
   return createTask(fn, scope, opts);
 };
@@ -88,7 +88,7 @@ export const task = <T, Args extends unknown[]>(
 export function watcher<T>(fn: () => T, opts?: SignalOptions<T> & { isolate?: boolean; tracer?: Tracer }): Watcher<T> {
   const def = createReactiveDefinition(opts?.id, opts?.desc, fn, opts?.equals, false, undefined, opts?.tracer);
 
-  const scope = opts?.isolate ? new SignalScope([]) : getCurrentScope();
+  const scope = opts?.isolate ? new SignalScope([]) : getCreationScope();
 
   return createReactiveSignal(def, undefined, undefined, scope);
 }
@@ -107,7 +107,7 @@ export const reactiveSignal = <T>(
 ): ReadonlySignal<T> => {
   const def = createReactiveDefinition(opts?.id, opts?.desc, compute, opts?.equals, false, undefined, undefined);
 
-  const scope = opts?.isolate ? new SignalScope([]) : getCurrentScope();
+  const scope = opts?.isolate ? new SignalScope([]) : getCreationScope();
 
   return createReactiveSignal(def, undefined, undefined, scope);
 };

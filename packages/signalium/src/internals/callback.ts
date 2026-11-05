@@ -7,12 +7,12 @@ let CURRENT_CALLBACK: Callback | undefined = undefined;
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export class Callback<T extends Function = Function> {
-  scope: SignalScope;
+  scope: SignalScope | undefined;
   deps: unknown[] | undefined;
   _callbacks: Callback[] | undefined;
   fn!: T;
 
-  constructor(fn: T, scope: SignalScope, deps?: unknown[]) {
+  constructor(fn: T, scope: SignalScope | undefined, deps?: unknown[]) {
     this.deps = deps;
     this.scope = scope;
 
@@ -25,7 +25,7 @@ export class Callback<T extends Function = Function> {
 
   setFn(fn: T) {
     this.fn = ((...args: unknown[]) => {
-      const scope = this.scope;
+      const scope = this.scope ?? getCurrentScope();
       const prevScope = getInternalCurrentScope();
       const prevCallback = CURRENT_CALLBACK;
 
@@ -50,7 +50,7 @@ export class Callback<T extends Function = Function> {
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export function createCallback<T extends Function>(
   fn: T,
-  scope: SignalScope,
+  scope: SignalScope | undefined,
   deps?: unknown[] | undefined,
 ): Callback<T> {
   return new Callback(fn, scope, deps);
