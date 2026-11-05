@@ -92,7 +92,7 @@ export default function component<Props extends object>(
 
     let signal = fnSignalRef.current;
 
-    if (signal === undefined) {
+    if (signal === undefined || signal.scope !== scope) {
       const created = createReactiveSignal(
         {
           compute: () => syncFn(propsRef.current),

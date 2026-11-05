@@ -235,7 +235,7 @@ export function createAsyncComponentWrapper<P extends object>(
     propsRef.current = props;
 
     let sig: ReactiveSignal<ReactTypes.ReactNode | ReactTypes.ReactNode[] | null, []> | undefined = fnSignalRef.current;
-    if (sig === undefined) {
+    if (sig === undefined || sig.scope !== scope) {
       let owned!: ReactiveSignal<ReactTypes.ReactNode | ReactTypes.ReactNode[] | null, []>;
       owned = createReactiveSignal(
         {
