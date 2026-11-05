@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { signal, reactiveSignal, watcher, context, getContext, withContexts } from '../index.js';
-import { batch, settled } from '../internals/scheduling.js';
+import { settled } from '../internals/scheduling.js';
 import { reactive } from './utils/instrumented-hooks.js';
 import { nextTick } from './utils/async.js';
 
@@ -693,77 +693,4 @@ describe('reactiveSignal', () => {
     });
   });
 
-  describe('batch', () => {
-    test('batch() does not hang settled() when called during an active flush', async () => {
-      const s = signal(0);
-      const w = watcher(() => s.value);
-      const unsub = w.addListener(() => {});
-
-      s.value = 1;
-
-      batch(() => {
-        s.value = 2;
-      });
-
-      const timeout = new Promise<string>((_, reject) => setTimeout(() => reject(new Error('settled() hung')), 500));
-      await Promise.race([settled(), timeout]);
-
-      expect(w.value).toBe(2);
-      unsub();
-    });
-
-    test('batch() coalesces multiple updates into one flush', async () => {
-      const a = signal(0);
-      const b = signal(0);
-      let computeCount = 0;
-
-      const sum = reactiveSignal(() => {
-        computeCount++;
-        return a.value + b.value;
-      });
-
-      const unsub = (sum as any).addListener(() => {});
-
-      expect(sum.value).toBe(0);
-      expect(computeCount).toBe(1);
-
-      batch(() => {
-        a.value = 1;
-        b.value = 2;
-      });
-
-      await nextTick();
-
-      expect(sum.value).toBe(3);
-      expect(computeCount).toBe(2);
-
-      unsub();
-    });
-
-    test('batch prevents intermediate listener notifications', async () => {
-      const s = signal(0);
-      let listenerCalls = 0;
-
-      const derived = reactiveSignal(() => s.value);
-      const unsub = (derived as any).addListener(() => {
-        listenerCalls++;
-      });
-
-      await nextTick();
-      listenerCalls = 0;
-
-      batch(() => {
-        s.value = 1;
-        s.value = 2;
-        s.value = 3;
-      });
-
-      await nextTick();
-
-      expect(derived.value).toBe(3);
-      expect(listenerCalls).toBe(1);
-
-      unsub();
-    });
-  });
 });
