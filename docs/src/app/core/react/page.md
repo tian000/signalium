@@ -225,7 +225,7 @@ Signalium's Reactive Promises work seamlessly with React components. You can eas
 
 ```tsx
 const DataComponent = component(() => {
-  const data = useReactive(getData); // returns a Reactive Promise
+  const data = getData(); // call the reactive function directly; returns a Reactive Promise
 
   if (data.isPending) {
     return <div>Loading...</div>;
@@ -238,6 +238,8 @@ const DataComponent = component(() => {
   return <div>{data.value}</div>;
 });
 ```
+
+Inside a `component()` body, call the reactive function directly — `getData()` here — so the signal graph tracks it. (`useReactive` is for plain, non-`component()` React components, and throws when called inside a reactive function in development.)
 
 However, there are a few important things to note:
 
@@ -259,7 +261,7 @@ const MemoizedComponent = memo(({ value }) => {
 });
 
 function Parent() {
-  const data = useReactive(getData); // returns a Reactive Promise
+  const data = useReactive(() => getData()); // returns a Reactive Promise
   return <MemoizedComponent value={data.value} />;
 }
 ```

@@ -160,31 +160,32 @@ When `first` or `last` change, only `formatName` (and dependents) recompute. `ca
 ### useReactive
 
 ```ts
-export function useReactive<R>(signal: Signal<R>): R;
-export function useReactive<R>(signal: ReactivePromise<R>): ReactivePromise<R>;
-export function useReactive<R, Args extends readonly unknown[]>(
-  fn: (...args: Args) => R,
-  ...args: Args
-): R;
+export function useReactive<R>(
+  fn: () => R,
+  options?: { delivery?: 'sync' | 'state' },
+): ReactiveValue<R>;
 ```
 
 Helper function to read reactive values in standard React components **that are not defined with `component`**. This hook is only needed if you are not converting a component to a reactive component, OR if you are using a reactive value inside of a custom hook that is also used in non-reactive components.
+
+`useReactive` takes a single zero-argument thunk. Read signals and call reactive functions **inside** the thunk, and close over any values you need rather than passing them as extra arguments — extra arguments are not accepted, and a second positional argument is interpreted as the `options` object. Calling `useReactive` inside a reactive function — including a `component()` body — throws in development; inside `component()`, read signals and call reactive functions directly instead.
+
+When the thunk returns a `ReactivePromise` (for example, an `async` reactive function), the hook returns a structurally-shared snapshot that flattens the promise to a plain object exposing `value`, `error`, `isPending`, `isRejected`, `isResolved`, `isReady`, and `isSettled`. For any other result it returns a structurally-shared snapshot of the thunk's return value, so React's referential equality works as expected.
 
 Examples:
 
 ```tsx
 import { useSignal, useReactive } from 'signalium/react';
-import { reactive, task } from 'signalium';
+import { reactive, type Signal } from 'signalium';
 
-// 1) Read a signal
+// 1) Read a signal — read its `.value` inside the thunk
 const Display = () => {
   const message = useSignal('hello');
-  const value = useReactive(message);
+  const value = useReactive(() => message.value);
   return <p>{value}</p>;
 };
 
-// 2) Read a computed reactive function
-// Here we create a reactive function and use it directly
+// 2) Read a computed reactive function — close over the signal arguments
 const computeArea = reactive(
   (width: Signal<number>, height: Signal<number>) => width.value * height.value,
 );
@@ -192,7 +193,7 @@ const computeArea = reactive(
 const Area = () => {
   const width = useSignal(3);
   const height = useSignal(4);
-  const area = useReactive(computeArea, width, height);
+  const area = useReactive(() => computeArea(width, height));
 
   return (
     <div>
@@ -203,19 +204,20 @@ const Area = () => {
   );
 };
 
-// 3) Read an async reactive function
+// 3) Read an async reactive function — close over the arguments; the result
+//    is a flattened ReactivePromise snapshot with isPending/isReady/value/etc.
 const fetchUser = reactive(async (id: string) => {
   const res = await fetch(`/api/users/${id}`);
   return res.json() as Promise<{ id: string; name: string }>;
 });
 
 const User = () => {
-  let user = useReactive(fetchUser, '1');
+  const user = useReactive(() => fetchUser('1'));
 
   return (
     <div>
       {user.isPending && <p>Loading…</p>}
-      {user.error && <p>Error</p>}
+      {user.isRejected && <p>Error</p>}
       {user.isReady && <p>{user.value.name}</p>}
     </div>
   );
@@ -224,11 +226,12 @@ const User = () => {
 
 `useReactive`, `useReactiveShallow` and `useReactiveDeep` take an optional last-position `{ delivery?: 'sync' | 'state' }` when called with a thunk (`useReactive(() => price(id).value, { delivery: 'state' })`), overriding the global [`reactDelivery`](/api/signalium/config) mode for that reader.
 
-| Overload        | Parameters                    | Returns                             |
-| --------------- | ----------------------------- | ----------------------------------- |
-| Signal          | `signal: Signal<R>`           | `R`                                 |
-| ReactivePromise | `signal: ReactivePromise<R>`  | `ReactivePromise<R>`                |
-| Function        | `fn: (...args) => R, ...args` | `R` (or `ReactivePromise` if async) |
+| Parameter        | Type                | Description                                                                                                                                                             |
+| ---------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| fn               | `() => R`           | A zero-argument thunk. Read signals and call reactive functions inside it; close over any values you need instead of passing them as extra arguments.                   |
+| options.delivery | `'sync' \| 'state'` | Overrides the global [`reactDelivery`](/api/signalium/config) mode for this reader. See [Update delivery and transitions](/core/react#update-delivery-and-transitions). |
+
+Returns `ReactiveValue<R>`: a structurally-shared snapshot of the thunk's result, or a flattened `ReactivePromise` snapshot (exposing `value`, `isPending`, `isReady`, …) when the thunk returns a `ReactivePromise`.
 
 ### useContext
 
